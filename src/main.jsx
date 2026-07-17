@@ -18,21 +18,38 @@ function App() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedRole, setSelectedRole] = useState('student');
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchUserRole(session.user.id);
-      else setLoading(false);
-    });
+  // این بخش را جایگزین useEffect و توابع مرتبط ابتدای کامپوننت App کنید:
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchUserRole(session.user.id);
-      else {
+    useEffect(() => {
+      // ۱. بررسی نشست فعلی هنگام لود اولیه صفحه
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        handleUserSession(session);
+      });
+    
+      // ۲. رصد تغییرات وضعیت احراز هویت (ورود/خروج/ثبت‌نام)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        handleUserSession(session);
+      });
+    
+      return () => subscription.unsubscribe();
+    }, []);
+    
+    const handleUserSession = (session) => {
+      if (session) {
+        setSession(session);
+        // استخراج دقیق نقش از متادیتای کاربر
+        const userRole = session.user?.user_metadata?.role;
+        if (userRole) {
+          setRole(userRole);
+        } else {
+          setRole('student'); // اگر نقشی یافت نشد، پیش‌فرض دانشجو
+        }
+      } else {
+        setSession(null);
         setRole(null);
-        setLoading(false);
       }
-    });
+      setLoading(false);
+    };
 
     return () => subscription.unsubscribe();
   }, []);
