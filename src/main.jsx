@@ -306,34 +306,35 @@ function StudentDashboard({ userId }) {
   }, [timeLeft, currentQuiz]);
 
   const handleSubmitQuiz = async () => {
-    if (!currentQuiz) return;
-    setLoading(true);
+  if (!currentQuiz) return;
+  setLoading(true);
 
-    try {
-      const submissionData = {
-        user_id: userId,
-        quiz_id: currentQuiz.id,
-        answers: answers, 
-        submitted_at: new Date().toISOString()
-      };
+  try {
+    // هماهنگ‌سازی دقیق با ساختار جدول شما
+    const submissionData = {
+      quiz_id: currentQuiz.id,
+      student_id: userId, // تغییر نام کلید به student_id مطابق دیتابیس شما
+      answers: answers,
+      status: 'submitted' // تغییر وضعیت از در جریان به ثبت شده
+    };
 
-      const { error } = await supabase
-        .from('quiz_submissions')
-        .insert([submissionData]);
+    const { error } = await supabase
+      .from('quiz_submissions')
+      .insert([submissionData]);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      alert('پاسخ‌های شما با موفقیت ثبت شد.');
-      setCurrentQuiz(null);
-      setQuestions([]);
-      fetchAvailableQuizzes();
-    } catch (error) {
-      console.error(error);
-      alert(`خطا در ثبت نهایی آزمون: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+    alert('پاسخ‌های شما با موفقیت ثبت شد.');
+    setCurrentQuiz(null);
+    setQuestions([]);
+    fetchAvailableQuizzes();
+  } catch (error) {
+    console.error(error);
+    alert(`خطا در ثبت نهایی آزمون: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds < 0) return "00:00";
