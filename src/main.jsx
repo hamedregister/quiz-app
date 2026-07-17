@@ -290,111 +290,168 @@ function TeacherDashboard({ userId }) {
 }
 
 // --- داشبورد دانشجو ---
-function StudentDashboard({ userId }) {
-  const [quizzes, setQuizzes] = useState([]);
-  const [activeQuiz, setActiveQuiz] = useState(null);
-  const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(0);
+upabase
+        .from('quizzes')
+        .select('*')
+        .gt('end_time', now)
+        .order('start_time', { ascending: true });
 
-  useEffect(() => {
-    fetchAvailableQuizzes();
-  }, []);
+      if (error) throw error;
+      setQuizzes(data || []);
+    } catch (error) {
+      console.error('Error fetching quizzes:', error);
+    }
+  };
 
+  // ۲. شروع آزمون و دریافت سوالات مربوط به آن
+  const startQuiz = async (quiz) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('quiz_id', quiz.id);
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        alert('این آزمون هیچ سوالی ندارد!');
+        return;
+      }
+
+      setCurrentQuiz(quiz);
+      setQuestions(data);
+      setAnswers({});
+
+      // محاسبه زمان باقی‌مانده بر اساس زمان پایان آزمون (به ثانیه)
+      const durationInSeconds = Math.floor((new Date(quiz.end_time) - new Date()) / 1000);
+      setTimeLeft(durationInSeconds > 0 ? durationInSeconds : 0);
+
+    } catch (error) {
+      console.error('Error starting quiz:', error);
+      alert('خطا در بارگذاری سوالات آزمون');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // تایمر معکوس آزمون
   useEffect(() => {
-    if (timeLeft <= 0 && activeQuiz) {
-      handleSubmitQuiz();
+    if (!currentQuiz || timeLeft <= 0) {
+      if (currentQuiz && timeLeft === 0) {
+        alert('زمان آزمون به پایان رسید!');
+        handleSubmitQuiz();
+      }
       return;
     }
-    if (!activeQuiz) return;
 
     const timer = setInterval(() => {
       setTimeLeft(prev => prev - 1);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, activeQuiz]);
+  }, [timeLeft, currentQuiz]);
 
-  const fetchAvailableQuizzes = async () => {
-    const { data } = await supabase.from('quizzes').select('*');
-    if (data) setQuizzes(data);
+  // ۳. ثبت نهایی پاسخ‌های دانشجو در دیتابیس
+
+const handleSubmitQuiz = async () => {
+  if (!currentQuiz) return;
+  setLoading(true);
+
+  try {
+    // آماده‌سازی دقیق payload برای جدول quiz_submissions
+    const submissionData = {
+      user_id: userId,
+      quiz_id: currentQuiz.id,
+      // شیء answers دقیقاً به فرمت { "question_id_1": "A", "question_id_2": "C" } ذخیره می‌شود
+      answers: answers, 
+      submitted_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from('quiz_submissions') // استفاده از نام دقیق جدول شما
+      .insert([submissionData]);
+
+    if (error) throw error;
+
+    alert('پاسخ‌های شما با موفقیت در سیستم ثبت شد.');
+    setCurrentQuiz(null);
+    setQuestions([]);
+    fetchAvailableQuizzes();
+  } catch (error) {
+    console.error('Error submitting quiz:', error);
+    alert(`خطا در ثبت آزمون: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // فرمت کردن زمان به شکل MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const startQuiz = (quiz) => {
-    setActiveQuiz(quiz);
-    setTimeLeft(quiz.duration * 60);
-    setAnswers({});
-  };
-
-  const handleSubmitQuiz = async () => {
-    let score = 0;
-    activeQuiz.questions.forEach((q, idx) => {
-      if (answers[idx] === q.correct) score += 1;
-    });
-
-    const finalScore = ((score / activeQuiz.questions.length) * 20).toFixed(2);
-
-    const { error } = await supabase.from('submissions').insert([
-      { quiz_id: activeQuiz.id, student_id: userId, score: parseFloat(finalScore), answers }
-    ]);
-
-    if (!error) {
-      alert(`آزمون شما با موفقیت ثبت شد. نمره‌ شما: ${finalScore} از ۲۰`);
-      setActiveQuiz(null);
-    } else {
-      alert('خطا در ثبت آزمون: ' + error.message);
-    }
-  };
-
-  if (activeQuiz) {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = timeLeft % 60;
-
+  if (currentQuiz) {
     return (
-      <div style={{ background: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f1c40f', padding: '10px 20px', borderRadius: '6px', marginBottom: '20px', fontWeight: 'bold' }}>
-          <span>عنوان آزمون: {activeQuiz.title}</span>
-          <span style={{ color: timeLeft < 60 ? '#e74c3c' : '#000' }}>
-            ⏱️ زمان باقی‌مانده: {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
-          </span>
-        </div>
-
-        {activeQuiz.questions.map((q, idx) => (
-          <div key={idx} style={{ marginBottom: '20px', padding: '15px', borderBottom: '1px solid #eee' }}>
-            <p style={{ fontWeight: 'bold' }}>{idx + 1}. {q.q}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginRight: '15px' }}>
-              <label><input type="radio" name={`q-${idx}`} checked={answers[idx] === 'a'} onChange={() => setAnswers({...answers, [idx]: 'a'})} /> الف) {q.a}</label>
-              <label><input type="radio" name={`q-${idx}`} checked={answers[idx] === 'b'} onChange={() => setAnswers({...answers, [idx]: 'b'})} /> ب) {q.b}</label>
-              <label><input type="radio" name={`q-${idx}`} checked={answers[idx] === 'c'} onChange={() => setAnswers({...answers, [idx]: 'c'})} /> ج) {q.c}</label>
-              <label><input type="radio" name={`q-${idx}`} checked={answers[idx] === 'd'} onChange={() => setAnswers({...answers, [idx]: 'd'})} /> د) {q.d}</label>
+      <div className="quiz-container">
+        <h2>{currentQuiz.title}</h2>
+        <div className="timer">زمان باقی‌مانده: {formatTime(timeLeft)}</div>
+        
+        {questions.map((q, index) => (
+          <div key={q.id} className="question-block">
+            <p><strong>سوال {index + 1}:</strong> {q.question_text}</p>
+            <div className="options">
+              {['A', 'B', 'C', 'D'].map(opt => (
+                <label key={opt} className="option-label">
+                  <input
+                    type="radio"
+                    name={`question-${q.id}`}
+                    value={opt}
+                    checked={answers[q.id] === opt}
+                    // ذخیره با همان حروف بزرگ A, B, C, D که دیتابیس دوست دارد
+                    onChange={() => setAnswers({ ...answers, [q.id]: opt })} 
+                  />
+                  {q[`option_${opt.toLowerCase()}`]}
+                </label>
+              ))}
             </div>
           </div>
         ))}
 
-        <button onClick={handleSubmitQuiz} style={{ padding: '12px 25px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', float: 'left' }}>
-          پایان آزمون و ثبت نهایی
+        <button onClick={handleSubmitQuiz} disabled={loading} className="btn-submit">
+          {loading ? 'در حال ثبت...' : 'پایان و ارسال آزمون'}
         </button>
-        <div style={{ clear: 'both' }}></div>
       </div>
     );
   }
 
   return (
-    <div>
-      <h3>✍️ آزمون‌های فعال و در دسترس</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginTop: '15px' }}>
-        {quizzes.length === 0 ? <p>هیچ آزمونی در حال حاضر تعریف نشده است.</p> : quizzes.map(quiz => (
-          <div key={quiz.id} style={{ border: '1px solid #e0e0e0', padding: '15px', borderRadius: '8px', backgroundColor: '#fafafa' }}>
-            <h4>{quiz.title}</h4>
-            <p style={{ color: '#666', fontSize: '14px' }}>⏱️ مدت زمان آزمون: {quiz.duration} دقیقه</p>
-            <button onClick={() => startQuiz(quiz)} style={{ width: '100%', padding: '8px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-              شروع فرآیند آزمون
-            </button>
-          </div>
-        ))}
-      </div>
+    <div className="dashboard-container">
+      <h2>آزمون‌های فعال و در دسترس</h2>
+      {quizzes.length === 0 ? (
+        <p>در حال حاضر هیچ آزمون فعالی وجود ندارد.</p>
+      ) : (
+        <ul className="quiz-list">
+          {quizzes.map(quiz => (
+            <li key={quiz.id} className="quiz-item">
+              <div>
+                <strong>{quiz.title}</strong>
+                <span className="quiz-date"> پایان: {new Date(quiz.end_time).toLocaleTimeString('fa-IR')}</span>
+              </div>
+              <button onClick={() => startQuiz(quiz)} disabled={loading} className="btn-start">
+                شروع آزمون
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
+
+export default StudentDashboard;
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
