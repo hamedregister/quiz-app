@@ -195,7 +195,7 @@ function TeacherDashboard({ userId }) {
 
       // مرحله دوم: ثبت سوالات متصل به آزمون
       // مپ کردن حروف الف، ب، ج، د (یا a, b, c, d) به اعداد 1 تا 4 برای دیتابیس
-      const optionMapping = { 'a': '1', 'b': '2', 'c': '3', 'd': '4' };
+      const optionMapping = { 'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D' };
       
       const questionsToInsert = questions.map(item => ({
         quiz_id: createdQuizId,
