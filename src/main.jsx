@@ -8,10 +8,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [role, setRole] = useState(null); // 'teacher' یا 'student'
+  const [role, setRole] = useState(null); 
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [hasError, setHasError] = useState(false);
+  const [errorDetails, setErrorDetails] = useState('');
+
+  // مکانیزم شکار خطای رندری (Error Boundary ساده)
+  useEffect(() => {
+    const handleRuntimeErrors = (event) => {
+      setHasError(true);
+      setErrorDetails(event.error?.message || 'خطای ناشناخته در رندر کامپوننت‌ها');
+    };
+    window.addEventListener('error', handleRuntimeErrors);
+    return () => window.removeEventListener('error', handleRuntimeErrors);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -59,16 +71,30 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    supabase.auth.signOut();
-    localStorage.clear(); // پاکسازی کامل برای رفع حالت صفحه سفید
-    window.location.reload();
+    supabase.auth.signOut().then(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = window.location.origin; 
+    });
   };
+
+  if (hasError) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center', background: '#fff5f5', border: '2px solid #fc8181', direction: 'rtl' }}>
+        <h2 style={{ color: '#c53030' }}>برنامه با خطا مواجه شد!</h2>
+        <p style={{ dir: 'ltr', background: '#edf2f7', padding: '10px' }}>{errorDetails}</p>
+        <button onClick={handleLogout} style={{ padding: '10px 20px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          خروج اضطراری و پاکسازی سشن
+        </button>
+      </div>
+    );
+  }
 
   if (loading) return <div style={{ textAlign: 'center', marginTop: '50px' }}>در حال بارگذاری...</div>;
 
   if (!session) {
     return (
-      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
+      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', direction: 'rtl' }}>
         <h2 style={{ textAlign: 'center' }}>ورود به سامانه آزمون</h2>
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: '15px' }}>
@@ -89,7 +115,7 @@ export default function App() {
     <div style={{ padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
         <span>کاربر: {session.user.email} ({role === 'teacher' ? 'استاد' : 'دانشجو'})</span>
-        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج اضطراری</button>
+        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج عادی</button>
       </header>
 
       <main style={{ marginTop: '20px' }}>
@@ -227,7 +253,7 @@ function TeacherDashboard({ userId }) {
 }
 
 // ==========================================
-// کامپوننت داشبورد دانشجو (امن‌سازی شده در برابر خطا)
+// کامپوننت داشبورد دانشجو (با مدیریت خطای تایمر و آبجکت‌ها)
 // ==========================================
 function StudentDashboard({ userId }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -258,6 +284,7 @@ function StudentDashboard({ userId }) {
   };
 
   const startQuiz = async (quiz) => {
+    if (!quiz || !quiz.id) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -272,12 +299,15 @@ function StudentDashboard({ userId }) {
         return;
       }
 
-      setCurrentQuiz(quiz);
+      // محاسبه زمان به صورت امن جهت جلوگیری از NaN شدن تایمر
+      const endTimeParsed = Date.parse(quiz.end_time);
+      const nowParsed = Date.now();
+      const durationInSeconds = Math.floor((endTimeParsed - nowParsed) / 1000);
+
+      setTimeLeft(durationInSeconds > 0 ? durationInSeconds : 0);
       setQuestions(data);
       setAnswers({});
-
-      const durationInSeconds = Math.floor((new Date(quiz.end_time) - new Date()) / 1000);
-      setTimeLeft(durationInSeconds > 0 ? durationInSeconds : 0);
+      setCurrentQuiz(quiz);
     } catch (error) {
       console.error(error);
       alert('خطا در بارگذاری سوالات');
@@ -333,6 +363,7 @@ function StudentDashboard({ userId }) {
   };
 
   const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds < 0) return "00:00";
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
@@ -341,33 +372,35 @@ function StudentDashboard({ userId }) {
   if (currentQuiz) {
     return (
       <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #eee' }}>
-        <h2>{currentQuiz.title}</h2>
+        <h2>{currentQuiz.title || 'آزمون جاری'}</h2>
         <div style={{ color: 'red', fontWeight: 'bold', marginBottom: '20px' }}>زمان باقی‌مانده: {formatTime(timeLeft)}</div>
         
-        {questions.map((q, index) => (
-          <div key={q.id} style={{ marginBottom: '20px', borderBottom: '1px dashed #eee', paddingBottom: '15px' }}>
-            <p><strong>سوال {index + 1}:</strong> {q.question_text}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-              {['A', 'B', 'C', 'D'].map(opt => {
-                // دریافت امن گزینه‌ها بر اساس نام ستون‌ها در دیتابیس
-                const optionValue = q[`option_${opt.toLowerCase()}`] || q[`option_${opt}`] || q[opt] || '';
-                return (
-                  <label key={opt} style={{ cursor: 'pointer' }}>
-                    <input
-                      type="radio"
-                      name={`question-${q.id}`}
-                      value={opt}
-                      checked={answers[q.id] === opt}
-                      onChange={() => setAnswers({ ...answers, [q.id]: opt })} 
-                      style={{ marginLeft: '8px' }}
-                    />
-                    {opt}: {optionValue}
-                  </label>
-                );
-              })}
+        {questions.map((q, index) => {
+          if (!q) return null;
+          return (
+            <div key={q.id || index} style={{ marginBottom: '20px', borderBottom: '1px dashed #eee', paddingBottom: '15px' }}>
+              <p><strong>سوال {index + 1}:</strong> {q.question_text || 'بدون متن سوال'}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                {['A', 'B', 'C', 'D'].map(opt => {
+                  const optionValue = q[`option_${opt.toLowerCase()}`] || q[`option_${opt}`] || q[opt] || 'بدون گزینه';
+                  return (
+                    <label key={opt} style={{ cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name={`question-${q.id}`}
+                        value={opt}
+                        checked={answers[q.id] === opt}
+                        onChange={() => setAnswers({ ...answers, [q.id]: opt })} 
+                        style={{ marginLeft: '8px' }}
+                      />
+                      {opt}: {optionValue}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <button onClick={handleSubmitQuiz} disabled={loading} style={{ padding: '10px 25px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}>
           {loading ? 'در حال ارسال...' : 'پایان و ارسال آزمون'}
@@ -387,7 +420,7 @@ function StudentDashboard({ userId }) {
             <li key={quiz.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9f9f9', padding: '15px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #ddd' }}>
               <div>
                 <strong>{quiz.title}</strong>
-                <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>پایان: {new Date(quiz.end_time).toLocaleTimeString('fa-IR')}</div>
+                <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>پایان: {quiz.end_time ? new Date(quiz.end_time).toLocaleTimeString('fa-IR') : 'نامشخص'}</div>
               </div>
               <button onClick={() => startQuiz(quiz)} disabled={loading} style={{ padding: '6px 15px', background: '#17a2b8', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                 شروع آزمون
