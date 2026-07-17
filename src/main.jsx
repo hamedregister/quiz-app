@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { createClient } from '@supabase/supabase-js';
+// این بخش را در بالای فایل جایگزین خطوط قبلی سوبابیس کنید
+import { createClient } from 'https://esm.sh/@supabase/supabase-js'
 
 // فراخوانی متغیرهای محیطی ست شده در گیت‌هاب اکشنز و سوبابیس
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
