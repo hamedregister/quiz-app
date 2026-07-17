@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-io'; // اگر نام پکیج متفاوت است به همان صورت قبلی (مثلا @supabase/supabase-js) تغییر دهید
+import { createClient } from '@supabase/supabase-js'; // اگر نام پکیج متفاوت است به همان صورت قبلی (مثلا @supabase/supabase-js) تغییر دهید
 
 // ۱. تنظیمات اولیه سوبابیس
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
