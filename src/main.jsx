@@ -106,11 +106,43 @@ function MainApp() {
 // ==========================================
 // کامپوننت داشبورد استاد
 // ==========================================
+// ==========================================
+// کامپوننت داشبورد استاد (نسخه اصلاح شده با لیست آزمون‌ها)
+// ==========================================
 function TeacherDashboard({ userId }) {
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(10); 
   const [questions, setQuestions] = useState([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
   const [loading, setLoading] = useState(false);
+  const [myQuizzes, setMyQuizzes] = useState([]); // وضعیت ذخیره آزمون‌های استاد
+
+  // فراخوانی آزمون‌ها به محض لود شدن داشبورد استاد
+  useEffect(() => {
+    if (userId) {
+      fetchMyQuizzes();
+    }
+  }, [userId]);
+
+  const fetchMyQuizzes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .select(`
+          id,
+          title,
+          start_time,
+          end_time,
+          questions (id)
+        `)
+        .eq('created_by', userId)
+        .order('start_time', { ascending: false });
+
+      if (error) throw error;
+      setMyQuizzes(data || []);
+    } catch (err) {
+      console.error('Error fetching teacher quizzes:', err);
+    }
+  };
 
   const handleAddQuestion = () => {
     setQuestions([...questions, { q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
@@ -171,6 +203,7 @@ function TeacherDashboard({ userId }) {
       setTitle('');
       setDuration(10);
       setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
+      fetchMyQuizzes(); // به‌روزرسانی لیست آزمون‌ها پس از ساخت آزمون جدید
     } catch (err) {
       console.error(err);
       alert(`خطا در ایجاد آزمون: ${err.message}`);
@@ -180,48 +213,85 @@ function TeacherDashboard({ userId }) {
   };
 
   return (
-    <div>
-      <h2>پنل مدیریت استاد - ساخت آزمون جدید</h2>
-      <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
-        <div style={{ marginBottom: '10px' }}>
-          <label>عنوان آزمون: </label>
-          <input type="text" value={title} onChange={e => setTitle(e.target.value)} style={{ padding: '6px', width: '250px' }} />
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      {/* بخش سمت راست: فرم ساخت آزمون */}
+      <div>
+        <h2>ساخت آزمون جدید</h2>
+        <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid #ddd' }}>
+          <div style={{ marginBottom: '10px' }}>
+            <label>عنوان آزمون: </label>
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} style={{ padding: '6px', width: '250px' }} />
+          </div>
+          <div>
+            <label>مدت زمان آزمون (دقیقه): </label>
+            <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '6px', width: '80px' }} />
+          </div>
         </div>
-        <div>
-          <label>مدت زمان آزمون (دقیقه): </label>
-          <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '6px', width: '80px' }} />
-        </div>
+
+        <h3>سوالات آزمون</h3>
+        {questions.map((item, index) => (
+          <div key={index} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '15px', borderRadius: '6px', background: '#fff' }}>
+            <h4>سوال {index + 1}</h4>
+            <input type="text" placeholder="صورت سوال" value={item.q} onChange={e => handleQuestionChange(index, 'q', e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '10px', boxSizing: 'border-box' }} />
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <input type="text" placeholder="گزینه الف (A)" value={item.a} onChange={e => handleQuestionChange(index, 'a', e.target.value)} style={{ padding: '6px' }} />
+              <input type="text" placeholder="گزینه ب (B)" value={item.b} onChange={e => handleQuestionChange(index, 'b', e.target.value)} style={{ padding: '6px' }} />
+              <input type="text" placeholder="گزینه ج (C)" value={item.c} onChange={e => handleQuestionChange(index, 'c', e.target.value)} style={{ padding: '6px' }} />
+              <input type="text" placeholder="گزینه د (D)" value={item.d} onChange={e => handleQuestionChange(index, 'd', e.target.value)} style={{ padding: '6px' }} />
+            </div>
+
+            <div style={{ marginTop: '10px' }}>
+              <label>گزینه صحیح: </label>
+              <select value={item.correct} onChange={e => handleQuestionChange(index, 'correct', e.target.value)} style={{ padding: '4px' }}>
+                <option value="a">گزینه الف (A)</option>
+                <option value="b">گزینه ب (B)</option>
+                <option value="c">گزینه ج (C)</option>
+                <option value="d">گزینه د (D)</option>
+              </select>
+            </div>
+          </div>
+        ))}
+
+        <button onClick={handleAddQuestion} style={{ padding: '8px 15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}>افزودن سوال جدید</button>
+        <button onClick={handleCreateQuiz} disabled={loading} style={{ padding: '8px 20px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          {loading ? 'در حال ثبت...' : 'انتشار نهایی آزمون'}
+        </button>
       </div>
 
-      <h3>سوالات آزمون</h3>
-      {questions.map((item, index) => (
-        <div key={index} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '15px', borderRadius: '6px' }}>
-          <h4>سوال {index + 1}</h4>
-          <input type="text" placeholder="صورت سوال" value={item.q} onChange={e => handleQuestionChange(index, 'q', e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '10px' }} />
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <input type="text" placeholder="گزینه الف (A)" value={item.a} onChange={e => handleQuestionChange(index, 'a', e.target.value)} style={{ padding: '6px' }} />
-            <input type="text" placeholder="گزینه ب (B)" value={item.b} onChange={e => handleQuestionChange(index, 'b', e.target.value)} style={{ padding: '6px' }} />
-            <input type="text" placeholder="گزینه ج (C)" value={item.c} onChange={e => handleQuestionChange(index, 'c', e.target.value)} style={{ padding: '6px' }} />
-            <input type="text" placeholder="گزینه د (D)" value={item.d} onChange={e => handleQuestionChange(index, 'd', e.target.value)} style={{ padding: '6px' }} />
+      {/* بخش سمت چپ: لیست آزمون‌های ایجاد شده */}
+      <div>
+        <h2>آزمون‌های تعریف شده شما</h2>
+        {myQuizzes.length === 0 ? (
+          <p style={{ color: '#666' }}>هنوز آزمونی توسط شما ایجاد نشده است.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px', direction: 'rtl', textAlign: 'right' }}>
+              <thead>
+                <tr style={{ background: '#f1f1f1', borderBottom: '2px solid #ccc' }}>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>عنوان آزمون</th>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>تعداد سوالات</th>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>وضعیت زمان</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myQuizzes.map((quiz) => {
+                  const isExpired = new Date(quiz.end_time) < new Date();
+                  return (
+                    <tr key={quiz.id} style={{ borderBottom: '1px solid #ddd' }}>
+                      <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{quiz.title}</td>
+                      <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>{quiz.questions?.length || 0}</td>
+                      <td style={{ padding: '10px', border: '1px solid #ddd', color: isExpired ? 'red' : 'green' }}>
+                        {isExpired ? 'پایان یافته' : 'در دسترس / فعال'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-
-          <div style={{ marginTop: '10px' }}>
-            <label>گزینه صحیح: </label>
-            <select value={item.correct} onChange={e => handleQuestionChange(index, 'correct', e.target.value)} style={{ padding: '4px' }}>
-              <option value="a">گزینه الف (A)</option>
-              <option value="b">گزینه ب (B)</option>
-              <option value="c">گزینه ج (C)</option>
-              <option value="d">گزینه د (D)</option>
-            </select>
-          </div>
-        </div>
-      ))}
-
-      <button onClick={handleAddQuestion} style={{ padding: '8px 15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}>افزودن سوال جدید</button>
-      <button onClick={handleCreateQuiz} disabled={loading} style={{ padding: '8px 20px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-        {loading ? 'در حال ثبت...' : 'انتشار نهایی آزمون'}
-      </button>
+        )}
+      </div>
     </div>
   );
 }
