@@ -153,12 +153,25 @@ function TeacherDashboard() {
 
   const handleCreateQuiz = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.from('quizzes').insert([{ title, duration: parseInt(duration), questions }]).select();
-    if (!error) {
+    try {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .insert([{ title, duration: parseInt(duration), questions }]);
+      
+      if (error) {
+        console.error("Supabase Database Error:", error);
+        alert(`خطا در ذخیره دیتابیس: ${error.message}\nکد خطا: ${error.code}`);
+        return;
+      }
+  
       alert('آزمون با موفقیت ساخته و منتشر شد.');
       setTitle('');
+      setDuration(10);
       setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
       fetchQuizzes();
+    } catch (err) {
+      console.error("Unexpected Error:", err);
+      alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
     }
   };
 
