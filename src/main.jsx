@@ -18,73 +18,59 @@ function App() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedRole, setSelectedRole] = useState('student');
 
-  // این بخش را جایگزین useEffect و توابع مرتبط ابتدای کامپوننت App کنید:
+  useEffect(() => {
+    // ۱. بررسی نشست فعلی هنگام لود اولیه صفحه
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleUserSession(session);
+    });
 
-    useEffect(() => {
-      // ۱. بررسی نشست فعلی هنگام لود اولیه صفحه
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        handleUserSession(session);
-      });
-    
-      // ۲. رصد تغییرات وضعیت احراز هویت (ورود/خروج/ثبت‌نام)
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        handleUserSession(session);
-      });
-    
-      return () => subscription.unsubscribe();
-    }, []);
-    
-    const handleUserSession = (session) => {
-      if (session) {
-        setSession(session);
-        // استخراج دقیق نقش از متادیتای کاربر
-        const userRole = session.user?.user_metadata?.role;
-        if (userRole) {
-          setRole(userRole);
-        } else {
-          setRole('student'); // اگر نقشی یافت نشد، پیش‌فرض دانشجو
-        }
-      } else {
-        setSession(null);
-        setRole(null);
-      }
-      setLoading(false);
-    };
+    // ۲. رصد تغییرات وضعیت احراز هویت
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleUserSession(session);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRole = async (session) => {
-    if (session?.user?.user_metadata?.role) {
-      setRole(session.user.user_metadata.role);
+  const handleUserSession = (session) => {
+    if (session) {
+      setSession(session);
+      // استخراج دقیق نقش از متادیتای کاربر
+      const userRole = session.user?.user_metadata?.role;
+      if (userRole) {
+        setRole(userRole);
+      } else {
+        setRole('student');
+      }
     } else {
-      setRole('student'); // پیش فرض
+      setSession(null);
+      setRole(null);
     }
     setLoading(false);
   };
 
-    const handleAuth = async (e) => {
-      e.preventDefault();
-      if (isSignUp) {
-        // ارسال نقش در متادیتا به همراه ثبت نام
-        const { data, error } = await supabase.auth.signUp({ 
-          email, 
-          password,
-          options: {
-            data: { role: selectedRole }
-          }
-        });
-      
-        if (error) alert(error.message);
-        else {
-          alert('ثبت‌نام با موفقیت انجام شد. لطفاً ایمیل خود را تایید کنید.');
-          setIsSignUp(false);
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (isSignUp) {
+      const { data, error } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: { role: selectedRole }
         }
+      });
+      
+      if (error) {
+        alert(error.message);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) alert(error.message);
+        alert('ثبت‌نام با موفقیت انجام شد! اکنون می‌توانید وارد شوید.');
+        setIsSignUp(false);
       }
-    };
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) alert(error.message);
+    }
+  };
 
   if (loading) {
     return <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'sans-serif' }}>در حال بارگذاری ایمن وب‌اپلیکیشن آزمون‌ساز...</div>;
@@ -167,7 +153,7 @@ function TeacherDashboard() {
 
   const handleCreateQuiz = async (e) => {
     e.preventDefault();
-    const { data, error } = await supabase.from('quizzes').insert([{ title, duration: parseInt(duration), questions }]).select();
+    const { error } = await supabase.from('quizzes').insert([{ title, duration: parseInt(duration), questions }]).select();
     if (!error) {
       alert('آزمون با موفقیت ساخته و منتشر شد.');
       setTitle('');
@@ -274,7 +260,6 @@ function StudentDashboard({ userId }) {
   };
 
   const handleSubmitQuiz = async () => {
-    // فراخوانی سوبابیس اج فانکشن یا محاسبه محلی امن نمره
     let score = 0;
     activeQuiz.questions.forEach((q, idx) => {
       if (answers[idx] === q.correct) score += 1;
