@@ -1,36 +1,84 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+import { createClient } from '@supabase/supabase-js';
+
+// ۱. خواندن متغیرهای محیطی از Vite
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// مکانیزم دفاعی: اگر متغیرها خالی باشند، کلاینت سوبابیس را نمی‌سازیم تا برنامه کرش نکند
+let supabase = null;
+let envError = false;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes("your-") || SUPABASE_ANON_KEY.includes("your-")) {
+  envError = true;
+} else {
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
 
 function App() {
-  // شبیه‌سازی وضعیت ورود برای تست بالا آمدن قالب
-  const [view, setView] = useState('auth'); 
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(!envError); // اگر خطا داریم، نیازی به لودینگ دیتابیس نیست
+  const [view, setView] = useState('auth'); // auth, teacher, student
 
-  return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eef2f3', paddingBottom: '15px', marginBottom: '30px' }}>
-        <h2>سامانه امتحانات و آزمون‌های ریل‌تایم (نسخه کلاینت)</h2>
-      </header>
+  // بررسی وضعیت لاگین در شروع برنامه
+  useEffect(() => {
+    if (envError || !supabase) return;
 
-      <div style={{ maxWidth: '450px', margin: '60px auto', padding: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', borderRadius: '12px', backgroundColor: '#fff', border: '1px solid #eee' }}>
-        <h3>{isSignUp ? 'ایجاد حساب کاربری جدید' : 'ورود کاربری امن'}</h3>
-        <form style={{ display: 'flex', flexDirection: 'column', gap: '15px' }} onSubmit={(e) => e.preventDefault()}>
-          {isSignUp && <input type="text" placeholder="نام و نام خانوادگی" style={{ padding: '12px', borderRadius: '6px', border: '1px solid #ccc' }} />}
-          <input type="email" placeholder="آدرس ایمیل" style={{ padding: '12px', borderRadius: '6px', border: '1px solid #ccc' }} />
-          <input type="password" placeholder="کلمه عبور" style={{ padding: '12px', borderRadius: '6px', border: '1px solid #ccc' }} />
-          <button type="submit" style={{ backgroundColor: '#3498db', color: 'white', border: 'none', padding: '12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-            {isSignUp ? 'ثبت نام' : 'ورود امن'}
-          </button>
-        </form>
-        <p onClick={() => setIsSignUp(!isSignUp)} style={{ textAlign: 'center', marginTop: '15px', color: '#3498db', cursor: 'pointer', fontSize: '14px' }}>
-          {isSignUp ? 'حساب کاربری دارید؟ وارد شوید' : 'حساب کاربری ندارید؟ ثبت‌نام کنید'}
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    }).catch(err => {
+      console.error("Auth error:", err);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // نمایش خطای متغیرهای محیطی به جای صفحه سفید
+  if (envError) {
+    return (
+      <div style={{ maxWidth: '500px', margin: '100px auto', padding: '30px', border: '2px solid #e74c3c', borderRadius: '8px', backgroundColor: '#fdf2f2', fontFamily: 'sans-serif', direction: 'rtl', textAlign: 'center' }}>
+        <h3 style={{ color: '#c0392b' }}>⚠️ خطای پیکربندی متغیرهای محیطی</h3>
+        <p style={{ color: '#555', lineHeight: '1.6' }}>
+          متغیرهای اتصال به سوبابیس پیدا نشدند یا نامعتبر هستند. لطفا مطمئن شوید که 
+          <code style={{ background: '#eee', padding: '2px 6px', borderRadius: '4px', margin: '0 4px' }}>VITE_SUPABASE_URL</code> و 
+          <code style={{ background: '#eee', padding: '2px 6px', borderRadius: '4px', margin: '0 4px' }}>VITE_SUPABASE_ANON_KEY</code> 
+          را در بخش Repository Secrets در گیت‌هاب تعریف کرده‌اید.
         </p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif', direction: 'rtl' }}>
+        <h3>در حال بارگذاری ایمن وب اپلیکیشن آزمون‌ساز...</h3>
+      </div>
+    );
+  }
+
+  // کدهای مربوط به رندر داشبوردها و بخش احراز هویت
+  return (
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eee', paddingBottom: '15px' }}>
+        <h2>سامانه آزمون‌ساز آنلاین (استاد / دانشجو)</h2>
+        {session && <button onClick={() => supabase.auth.signOut()} style={{ padding: '8px 12px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج</button>}
+      </header>
+      
+      {/* در اینجا کامپوننت‌های اصلی بر اساس وضعیت session و نقش کاربر رندر می‌شوند */}
+      <div style={{ marginTop: '30px', textAlign: 'center' }}>
+        <p>اتصال به سوبابیس با موفقیت برقرار شد. در حال حاضر آماده توسعه بخش‌های داخلی دیتابیس هستیم.</p>
       </div>
     </div>
   );
 }
 
-// رندر مستقیم روی المان روت بدون هیچ لایه اضافی
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
