@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js'; // اگر نام پکیج متفاوت است به همان صورت قبلی (مثلا @supabase/supabase-js) تغییر دهید
+import { createClient } from '@supabase/supabase-js';
 
 // ۱. تنظیمات اولیه سوبابیس
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -14,14 +14,12 @@ export default function App() {
   const [password, setPassword] = useState('');
 
   useEffect(() => {
-    // دریافت اطلاعات نشست فعلی کاربری
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) fetchUserRole(session.user.id);
       else setLoading(false);
     });
 
-    // گوش دادن به تغییرات وضعیت لاگین
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) fetchUserRole(session.user.id);
@@ -34,11 +32,10 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // دریافت نقش کاربر از جدول پروفایل‌ها یا متادیتای کاربر
   const fetchUserRole = async (userId) => {
     try {
       const { data, error } = await supabase
-        .from('profiles') // نام جدول نقش‌های شما (مثلا profiles یا users)
+        .from('profiles')
         .select('role')
         .eq('id', userId)
         .single();
@@ -47,7 +44,7 @@ export default function App() {
       setRole(data?.role || 'student');
     } catch (err) {
       console.error("Error fetching role:", err);
-      setRole('student'); // مقدار پیش‌فرض در صورت نبود ردیف
+      setRole('student'); 
     } finally {
       setLoading(false);
     }
@@ -61,7 +58,11 @@ export default function App() {
     setLoading(false);
   };
 
-  const handleLogout = () => supabase.auth.signOut();
+  const handleLogout = () => {
+    supabase.auth.signOut();
+    localStorage.clear(); // پاکسازی کامل برای رفع حالت صفحه سفید
+    window.location.reload();
+  };
 
   if (loading) return <div style={{ textAlign: 'center', marginTop: '50px' }}>در حال بارگذاری...</div>;
 
@@ -88,7 +89,7 @@ export default function App() {
     <div style={{ padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
         <span>کاربر: {session.user.email} ({role === 'teacher' ? 'استاد' : 'دانشجو'})</span>
-        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج</button>
+        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج اضطراری</button>
       </header>
 
       <main style={{ marginTop: '20px' }}>
@@ -140,27 +141,16 @@ function TeacherDashboard({ userId }) {
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
 
-      // مرحله اول: ثبت آزمون در جدول quizzes
       const { data: quizData, error: quizError } = await supabase
         .from('quizzes')
-        .insert([
-          { 
-            title, 
-            start_time: startTime.toISOString(), 
-            end_time: endTime.toISOString(),
-            created_by: userId 
-          }
-        ])
+        .insert([{ title, start_time: startTime.toISOString(), end_time: endTime.toISOString(), created_by: userId }])
         .select();
       
       if (quizError) throw quizError;
 
       const createdQuizId = quizData[0].id;
-
-      // مپ کردن حروف انتخابی فرم به فرمت حروف بزرگ مورد نیاز دیتابیس (A, B, C, D)
       const optionMapping = { 'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D' };
 
-      // مرحله دوم: آماده‌سازی و درج سوالات در جدول questions
       const questionsToInsert = questions.map(item => ({
         quiz_id: createdQuizId,
         question_text: item.q,
@@ -199,7 +189,7 @@ function TeacherDashboard({ userId }) {
         </div>
         <div>
           <label>مدت زمان آزمون (دقیقه): </label>
-          <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '6px', width: '8px' }} />
+          <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '6px', width: '80px' }} />
         </div>
       </div>
 
@@ -237,7 +227,7 @@ function TeacherDashboard({ userId }) {
 }
 
 // ==========================================
-// کامپوننت داشبورد دانشجو
+// کامپوننت داشبورد دانشجو (امن‌سازی شده در برابر خطا)
 // ==========================================
 function StudentDashboard({ userId }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -320,7 +310,7 @@ function StudentDashboard({ userId }) {
       const submissionData = {
         user_id: userId,
         quiz_id: currentQuiz.id,
-        answers: answers, // به صورت شیء مپ‌شده JSONB ذخیره می‌شود { "question_id": "A" }
+        answers: answers, 
         submitted_at: new Date().toISOString()
       };
 
@@ -358,19 +348,23 @@ function StudentDashboard({ userId }) {
           <div key={q.id} style={{ marginBottom: '20px', borderBottom: '1px dashed #eee', paddingBottom: '15px' }}>
             <p><strong>سوال {index + 1}:</strong> {q.question_text}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-              {['A', 'B', 'C', 'D'].map(opt => (
-                <label key={opt} style={{ cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name={`question-${q.id}`}
-                    value={opt}
-                    checked={answers[q.id] === opt}
-                    onChange={() => setAnswers({ ...answers, [q.id]: opt })} 
-                    style={{ marginLeft: '8px' }}
-                  />
-                  {opt}: {q[`option_${opt.toLowerCase()}`]}
-                </label>
-              ))}
+              {['A', 'B', 'C', 'D'].map(opt => {
+                // دریافت امن گزینه‌ها بر اساس نام ستون‌ها در دیتابیس
+                const optionValue = q[`option_${opt.toLowerCase()}`] || q[`option_${opt}`] || q[opt] || '';
+                return (
+                  <label key={opt} style={{ cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name={`question-${q.id}`}
+                      value={opt}
+                      checked={answers[q.id] === opt}
+                      onChange={() => setAnswers({ ...answers, [q.id]: opt })} 
+                      style={{ marginLeft: '8px' }}
+                    />
+                    {opt}: {optionValue}
+                  </label>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -390,7 +384,7 @@ function StudentDashboard({ userId }) {
       ) : (
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {quizzes.map(quiz => (
-            <li key={quiz.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9f9f9', padding: '15px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #ebd' }}>
+            <li key={quiz.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9f9f9', padding: '15px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #ddd' }}>
               <div>
                 <strong>{quiz.title}</strong>
                 <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>پایان: {new Date(quiz.end_time).toLocaleTimeString('fa-IR')}</div>
