@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 
 // ۱. تنظیمات اولیه سوبابیس
@@ -6,14 +7,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default function App() {
+function MainApp() {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState(null); 
-  const [loading, setLoading] = useState(false); // تغییر به false برای جلوگیری از قفل شدن صفحه
+  const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // بررسی وضعیت سشن کاربر هنگام لود اولیه برنامه
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -63,20 +63,19 @@ export default function App() {
     });
   };
 
-  // اگر کاربر لاگین نکرده باشد، مستقیماً فرم ورود نشان داده می‌شود
   if (!session) {
     return (
-      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', direction: 'rtl', background: '#fff', color: '#000' }}>
+      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', direction: 'rtl', background: '#fff', color: '#000', fontFamily: 'Tahoma, sans-serif' }}>
         <h2 style={{ textAlign: 'center' }}>ورود به سامانه آزمون</h2>
         {loading && <p style={{ color: 'blue', textAlign: 'center' }}>در حال پردازش...</p>}
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: '15px' }}>
             <label>ایمیل:</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }} />
           </div>
           <div style={{ marginBottom: '15px' }}>
             <label>رمز عبور:</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }} />
           </div>
           <button type="submit" disabled={loading} style={{ width: '100%', padding: '10px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
             ورود
@@ -86,7 +85,6 @@ export default function App() {
     );
   }
 
-  // اگر کاربر لاگین کرده باشد، هدر و داشبوردها رندر می‌شوند
   return (
     <div style={{ padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl', background: '#fff', color: '#000' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
@@ -405,5 +403,17 @@ function StudentDashboard({ userId }) {
         </ul>
       )}
     </div>
+  );
+}
+
+// ==========================================
+// اتصال نهایی به المان root در فایل HTML (تزریق به صفحه)
+// ==========================================
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <MainApp />
+    </React.StrictMode>
   );
 }
