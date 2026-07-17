@@ -9,27 +9,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function App() {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState(null); 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // تغییر به false برای جلوگیری از قفل شدن صفحه
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [hasError, setHasError] = useState(false);
-  const [errorDetails, setErrorDetails] = useState('');
 
-  // مکانیزم شکار خطای رندری (Error Boundary ساده)
-  useEffect(() => {
-    const handleRuntimeErrors = (event) => {
-      setHasError(true);
-      setErrorDetails(event.error?.message || 'خطای ناشناخته در رندر کامپوننت‌ها');
-    };
-    window.addEventListener('error', handleRuntimeErrors);
-    return () => window.removeEventListener('error', handleRuntimeErrors);
-  }, []);
-
+  // بررسی وضعیت سشن کاربر هنگام لود اولیه برنامه
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) fetchUserRole(session.user.id);
-      else setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -37,7 +25,6 @@ export default function App() {
       if (session) fetchUserRole(session.user.id);
       else {
         setRole(null);
-        setLoading(false);
       }
     });
 
@@ -57,8 +44,6 @@ export default function App() {
     } catch (err) {
       console.error("Error fetching role:", err);
       setRole('student'); 
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -74,28 +59,16 @@ export default function App() {
     supabase.auth.signOut().then(() => {
       localStorage.clear();
       sessionStorage.clear();
-      window.location.href = window.location.origin; 
+      window.location.reload();
     });
   };
 
-  if (hasError) {
-    return (
-      <div style={{ padding: '20px', textAlign: 'center', background: '#fff5f5', border: '2px solid #fc8181', direction: 'rtl' }}>
-        <h2 style={{ color: '#c53030' }}>برنامه با خطا مواجه شد!</h2>
-        <p style={{ dir: 'ltr', background: '#edf2f7', padding: '10px' }}>{errorDetails}</p>
-        <button onClick={handleLogout} style={{ padding: '10px 20px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          خروج اضطراری و پاکسازی سشن
-        </button>
-      </div>
-    );
-  }
-
-  if (loading) return <div style={{ textAlign: 'center', marginTop: '50px' }}>در حال بارگذاری...</div>;
-
+  // اگر کاربر لاگین نکرده باشد، مستقیماً فرم ورود نشان داده می‌شود
   if (!session) {
     return (
-      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', direction: 'rtl' }}>
+      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', direction: 'rtl', background: '#fff', color: '#000' }}>
         <h2 style={{ textAlign: 'center' }}>ورود به سامانه آزمون</h2>
+        {loading && <p style={{ color: 'blue', textAlign: 'center' }}>در حال پردازش...</p>}
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: '15px' }}>
             <label>ایمیل:</label>
@@ -105,24 +78,27 @@ export default function App() {
             <label>رمز عبور:</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
           </div>
-          <button type="submit" style={{ width: '100%', padding: '10px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>ورود</button>
+          <button type="submit" disabled={loading} style={{ width: '100%', padding: '10px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+            ورود
+          </button>
         </form>
       </div>
     );
   }
 
+  // اگر کاربر لاگین کرده باشد، هدر و داشبوردها رندر می‌شوند
   return (
-    <div style={{ padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl' }}>
+    <div style={{ padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl', background: '#fff', color: '#000' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-        <span>کاربر: {session.user.email} ({role === 'teacher' ? 'استاد' : 'دانشجو'})</span>
-        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج عادی</button>
+        <span>کاربر: {session.user?.email} ({role === 'teacher' ? 'استاد' : 'دانشجو'})</span>
+        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج</button>
       </header>
 
       <main style={{ marginTop: '20px' }}>
         {role === 'teacher' ? (
-          <TeacherDashboard userId={session.user.id} />
+          <TeacherDashboard userId={session.user?.id} />
         ) : (
-          <StudentDashboard userId={session.user.id} />
+          <StudentDashboard userId={session.user?.id} />
         )}
       </main>
     </div>
@@ -253,7 +229,7 @@ function TeacherDashboard({ userId }) {
 }
 
 // ==========================================
-// کامپوننت داشبورد دانشجو (با مدیریت خطای تایمر و آبجکت‌ها)
+// کامپوننت داشبورد دانشجو
 // ==========================================
 function StudentDashboard({ userId }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -299,7 +275,6 @@ function StudentDashboard({ userId }) {
         return;
       }
 
-      // محاسبه زمان به صورت امن جهت جلوگیری از NaN شدن تایمر
       const endTimeParsed = Date.parse(quiz.end_time);
       const nowParsed = Date.now();
       const durationInSeconds = Math.floor((endTimeParsed - nowParsed) / 1000);
