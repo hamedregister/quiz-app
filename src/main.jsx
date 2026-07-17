@@ -153,54 +153,78 @@ function TeacherDashboard() {
   };
 
   const handleCreateQuiz = async () => {
-      // ۱. بررسی ولیدیشن دستی
-      if (!title.trim()) {
-        alert('لطفاً عنوان آزمون را وارد کنید.');
-        return;
-      }
-    
-      for (let i = 0; i < questions.length; i++) {
-        const item = questions[i];
-        if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
-          alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
-          return;
+  // ۱. بررسی ولیدیشن دستی فیلدها
+  if (!title.trim()) {
+    alert('لطفاً عنوان آزمون را وارد کنید.');
+    return;
+  }
+
+  for (let i = 0; i < questions.length; i++) {
+    const item = questions[i];
+    if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
+      alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
+      return;
+    }
+  }
+
+  try {
+    console.log("در حال ساخت ردیف آزمون در جدول quizzes...");
+    const startTime = new Date();
+    const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
+
+    // مرحله اول: ثبت خود آزمون و دریافت شناسه آن (.select() برای گرفتن ID الزامی است)
+    const { data: quizData, error: quizError } = await supabase
+      .from('quizzes')
+      .insert([
+        { 
+          title, 
+          start_time: startTime.toISOString(), 
+          end_time: endTime.toISOString()
         }
-      }
+      ])
+      .select(); // آی‌دی آزمون ساخته شده را برمی‌گرداند
     
-      try {
-        console.log("در حال محاسبه زمان‌بندی آزمون...");
-        
-        // محاسبه زمان شروع (همین الان) و زمان پایان بر اساس مدت زمان وارد شده
-        const startTime = new Date();
-        const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
-    
-        const { data, error } = await supabase
-          .from('quizzes')
-          .insert([
-            { 
-              title, 
-              start_time: startTime.toISOString(), 
-              end_time: endTime.toISOString(), 
-              questions 
-            }
-          ]);
-        
-        if (error) {
-          console.error("Supabase Database Error:", error);
-          alert(`خطا در ذخیره دیتابیس: ${error.message}\nکد خطا: ${error.code}`);
-          return;
-        }
-    
-        alert('آزمون با موفقیت ساخته و در دیتابیس منتشر شد.');
-        setTitle('');
-        setDuration(10);
-        setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
-        fetchQuizzes();
-      } catch (err) {
-        console.error("Unexpected Error:", err);
-        alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
-      }
-    };
+    if (quizError) {
+      console.error("Quiz Insertion Error:", quizError);
+      alert(`خطا در ایجاد آزمون: ${quizError.message}`);
+      return;
+    }
+
+    const createdQuizId = quizData[0].id;
+    console.log(`آزمون با موفقیت ساخته شد. شناسه: ${createdQuizId}. حالا نوبت ثبت سوالات است...`);
+
+    // مرحله دوم: آماده‌سازی آرایه سوالات بر اساس ستون‌های جدول questions شما
+    // فرض بر این است که ستون‌های جدول questions شما شامل: quiz_id, question_text, option_a, option_b, option_c, option_d, correct_option است.
+    const questionsToInsert = questions.map(item => ({
+      quiz_id: createdQuizId,
+      question_text: item.q,
+      option_a: item.a,
+      option_b: item.b,
+      option_c: item.c,
+      option_d: item.d,
+      correct_option: item.correct
+    }));
+
+    const { error: questionsError } = await supabase
+      .from('questions')
+      .insert(questionsToInsert);
+
+    if (questionsError) {
+      console.error("Questions Insertion Error:", questionsError);
+      alert(`آزمون ساخته شد ولی سوالات ثبت نشدند: ${questionsError.message}`);
+      return;
+    }
+
+    alert('آزمون و تمامی سوالات آن با موفقیت منتشر شدند!');
+    setTitle('');
+    setDuration(10);
+    setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
+    fetchQuizzes();
+  } catch (err) {
+    console.error("Unexpected Error:", err);
+    alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
+  }
+};
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
