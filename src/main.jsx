@@ -153,43 +153,54 @@ function TeacherDashboard() {
   };
 
   const handleCreateQuiz = async () => {
-    // چک کردن ولیدیشن به صورت دستی و با پیام مشخص
-    if (!title.trim()) {
-      alert('لطفاً عنوان آزمون را وارد کنید.');
-      return;
-    }
-
-    // بررسی اینکه فیلدهای سوالات خالی نباشند
-    for (let i = 0; i < questions.length; i++) {
-      const item = questions[i];
-      if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
-        alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
+      // ۱. بررسی ولیدیشن دستی
+      if (!title.trim()) {
+        alert('لطفاً عنوان آزمون را وارد کنید.');
         return;
       }
-    }
-
-    try {
-      console.log("برقراری ارتباط با سوبابیس برای ثبت آزمون...");
-      const { data, error } = await supabase
-        .from('quizzes')
-        .insert([{ title, duration: parseInt(duration), questions }]);
-      
-      if (error) {
-        console.error("Supabase Database Error:", error);
-        alert(`خطا در ذخیره دیتابیس: ${error.message}\nکد خطا: ${error.code}`);
-        return;
+    
+      for (let i = 0; i < questions.length; i++) {
+        const item = questions[i];
+        if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
+          alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
+          return;
+        }
       }
-
-      alert('آزمون با موفقیت ساخته و منتشر شد.');
-      setTitle('');
-      setDuration(10);
-      setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
-      fetchQuizzes();
-    } catch (err) {
-      console.error("Unexpected Error:", err);
-      alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
-    }
-  };
+    
+      try {
+        console.log("در حال محاسبه زمان‌بندی آزمون...");
+        
+        // محاسبه زمان شروع (همین الان) و زمان پایان بر اساس مدت زمان وارد شده
+        const startTime = new Date();
+        const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
+    
+        const { data, error } = await supabase
+          .from('quizzes')
+          .insert([
+            { 
+              title, 
+              start_time: startTime.toISOString(), 
+              end_time: endTime.toISOString(), 
+              questions 
+            }
+          ]);
+        
+        if (error) {
+          console.error("Supabase Database Error:", error);
+          alert(`خطا در ذخیره دیتابیس: ${error.message}\nکد خطا: ${error.code}`);
+          return;
+        }
+    
+        alert('آزمون با موفقیت ساخته و در دیتابیس منتشر شد.');
+        setTitle('');
+        setDuration(10);
+        setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
+        fetchQuizzes();
+      } catch (err) {
+        console.error("Unexpected Error:", err);
+        alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
+      }
+    };
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
