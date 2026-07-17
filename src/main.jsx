@@ -194,6 +194,9 @@ function TeacherDashboard({ userId }) {
       console.log(`آزمون ساخته شد. شناسه: ${createdQuizId}. ارسال سوالات...`);
 
       // مرحله دوم: ثبت سوالات متصل به آزمون
+      // مپ کردن حروف الف، ب، ج، د (یا a, b, c, d) به اعداد 1 تا 4 برای دیتابیس
+      const optionMapping = { 'a': '1', 'b': '2', 'c': '3', 'd': '4' };
+      
       const questionsToInsert = questions.map(item => ({
         quiz_id: createdQuizId,
         question_text: item.q,
@@ -201,7 +204,7 @@ function TeacherDashboard({ userId }) {
         option_b: item.b,
         option_c: item.c,
         option_d: item.d,
-        correct_option: item.correct
+        correct_option: optionMapping[item.correct] || item.correct // اگر دیتابیس عدد بخواهد تبدیل می‌شود
       }));
 
       const { error: questionsError } = await supabase
