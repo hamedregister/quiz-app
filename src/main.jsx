@@ -1,155 +1,124 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-io'; // اگر نام پکیج متفاوت است به همان صورت قبلی (مثلا @supabase/supabase-js) تغییر دهید
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// ۱. تنظیمات اولیه سوبابیس
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-function App() {
+export default function App() {
   const [session, setSession] = useState(null);
+  const [role, setRole] = useState(null); // 'teacher' یا 'student'
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState(null); // 'teacher' | 'student'
-  
-  // فیلدهای فرم احراز هویت
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [selectedRole, setSelectedRole] = useState('student');
 
   useEffect(() => {
-    // ۱. بررسی نشست فعلی هنگام لود اولیه صفحه
+    // دریافت اطلاعات نشست فعلی کاربری
     supabase.auth.getSession().then(({ data: { session } }) => {
-      handleUserSession(session);
+      setSession(session);
+      if (session) fetchUserRole(session.user.id);
+      else setLoading(false);
     });
 
-    // ۲. رصد تغییرات وضعیت احراز هویت
+    // گوش دادن به تغییرات وضعیت لاگین
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleUserSession(session);
+      setSession(session);
+      if (session) fetchUserRole(session.user.id);
+      else {
+        setRole(null);
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleUserSession = (session) => {
-    if (session) {
-      setSession(session);
-      // استخراج دقیق نقش از متادیتای کاربر
-      const userRole = session.user?.user_metadata?.role;
-      if (userRole) {
-        setRole(userRole);
-      } else {
-        setRole('student');
-      }
-    } else {
-      setSession(null);
-      setRole(null);
+  // دریافت نقش کاربر از جدول پروفایل‌ها یا متادیتای کاربر
+  const fetchUserRole = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles') // نام جدول نقش‌های شما (مثلا profiles یا users)
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      setRole(data?.role || 'student');
+    } catch (err) {
+      console.error("Error fetching role:", err);
+      setRole('student'); // مقدار پیش‌فرض در صورت نبود ردیف
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert(`خطا در ورود: ${error.message}`);
     setLoading(false);
   };
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({ 
-        email, 
-        password,
-        options: {
-          data: { role: selectedRole }
-        }
-      });
-      
-      if (error) {
-        alert(error.message);
-      } else {
-        alert('ثبت‌نام با موفقیت انجام شد! اکنون می‌توانید وارد شوید.');
-        setIsSignUp(false);
-      }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
-    }
-  };
+  const handleLogout = () => supabase.auth.signOut();
 
-  if (loading) {
-    return <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'sans-serif' }}>در حال بارگذاری ایمن وب‌اپلیکیشن آزمون‌ساز...</div>;
+  if (loading) return <div style={{ textAlign: 'center', marginTop: '50px' }}>در حال بارگذاری...</div>;
+
+  if (!session) {
+    return (
+      <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
+        <h2 style={{ textAlign: 'center' }}>ورود به سامانه آزمون</h2>
+        <form onSubmit={handleLogin}>
+          <div style={{ marginBottom: '15px' }}>
+            <label>ایمیل:</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
+          </div>
+          <div style={{ marginBottom: '15px' }}>
+            <label>رمز عبور:</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '5px' }} />
+          </div>
+          <button type="submit" style={{ width: '100%', padding: '10px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>ورود</button>
+        </form>
+      </div>
+    );
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif', direction: 'rtl' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eee', paddingBottom: '15px', marginBottom: '20px' }}>
-        <h2>سامانه آزمون‌های آنلاین و ریل‌تایم</h2>
-        {session && (
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-            <span>کاربر: {session.user.email} ({role === 'teacher' ? 'استاد' : 'دانشجو'})</span>
-            <button onClick={() => supabase.auth.signOut()} style={{ padding: '6px 12px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج</button>
-          </div>
-        )}
+    <div style={{ padding: '20px', fontFamily: 'Tahoma, sans-serif', direction: 'rtl' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+        <span>کاربر: {session.user.email} ({role === 'teacher' ? 'استاد' : 'دانشجو'})</span>
+        <button onClick={handleLogout} style={{ padding: '5px 10px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>خروج</button>
       </header>
 
-      {!session ? (
-        <div style={{ maxWidth: '400px', margin: '50px auto', padding: '25px', border: '1px solid #ddd', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-          <h3>{isSignUp ? 'ثبت‌نام حساب جدید' : 'ورود به سامانه آزمون'}</h3>
-          <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '15px' }}>
-            <input type="email" placeholder="ایمیل" value={email} onChange={e => setEmail(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-            <input type="password" placeholder="رمز عبور" value={password} onChange={e => setPassword(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-            
-            {isSignUp && (
-              <div style={{ display: 'flex', gap: '15px', alignItems: 'center', margin: '5px 0' }}>
-                <label>نقش شما:</label>
-                <label><input type="radio" name="role" value="student" checked={selectedRole === 'student'} onChange={() => setSelectedRole('student')} /> دانشجو</label>
-                <label><input type="radio" name="role" value="teacher" checked={selectedRole === 'teacher'} onChange={() => setSelectedRole('teacher')} /> استاد</label>
-              </div>
-            )}
-            
-            <button type="submit" style={{ padding: '10px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
-              {isSignUp ? 'ایجاد حساب' : 'ورود امن'}
-            </button>
-          </form>
-          <p onClick={() => setIsSignUp(!isSignUp)} style={{ color: '#3498db', textAlign: 'center', marginTop: '15px', cursor: 'pointer', fontSize: '14px' }}>
-            {isSignUp ? 'قبلاً ثبت نام کرده‌اید؟ ورود' : 'حساب کاربری ندارید؟ ثبت نام آنلاین'}
-          </p>
-        </div>
-      ) : role === 'teacher' ? (
-        <TeacherDashboard userId={session.user.id} />
-      ) : (
-        <StudentDashboard userId={session.user.id} />
-      )}
+      <main style={{ marginTop: '20px' }}>
+        {role === 'teacher' ? (
+          <TeacherDashboard userId={session.user.id} />
+        ) : (
+          <StudentDashboard userId={session.user.id} />
+        )}
+      </main>
     </div>
   );
 }
 
-// --- داشبورد استاد ---
-// --- داشبورد استاد اصلاح‌شده ---
+// ==========================================
+// کامپوننت داشبورد استاد
+// ==========================================
 function TeacherDashboard({ userId }) {
-  const [quizzes, setQuizzes] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
   const [title, setTitle] = useState('');
-  const [duration, setDuration] = useState(10); // دقیقه
+  const [duration, setDuration] = useState(10); 
   const [questions, setQuestions] = useState([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchQuizzes();
-    
-    // فعال‌سازی مانیتورینگ ریل‌تایم برای پاسخ‌های ارسالی دانشجویان
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'submissions' }, payload => {
-        setSubmissions(prev => [payload.new, ...prev]);
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, []);
-
-  const fetchQuizzes = async () => {
-    const { data } = await supabase.from('quizzes').select('*').order('created_at', { ascending: false });
-    if (data) setQuizzes(data);
+  const handleAddQuestion = () => {
+    setQuestions([...questions, { q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
   };
 
-  const addQuestionField = () => {
-    setQuestions([...questions, { q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
+  const handleQuestionChange = (index, field, value) => {
+    const updated = [...questions];
+    updated[index][field] = value;
+    setQuestions(updated);
   };
 
   const handleCreateQuiz = async () => {
@@ -166,12 +135,12 @@ function TeacherDashboard({ userId }) {
       }
     }
 
+    setLoading(true);
     try {
-      console.log("در حال ساخت ردیف آزمون به همراه شناسه استاد...");
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
 
-      // مرحله اول: ثبت آزمون با پر کردن فیلد created_by
+      // مرحله اول: ثبت آزمون در جدول quizzes
       const { data: quizData, error: quizError } = await supabase
         .from('quizzes')
         .insert([
@@ -179,24 +148,19 @@ function TeacherDashboard({ userId }) {
             title, 
             start_time: startTime.toISOString(), 
             end_time: endTime.toISOString(),
-            created_by: userId // شناسه کاربری استاد در اینجا قرار می‌گیرد
+            created_by: userId 
           }
         ])
         .select();
       
-      if (quizError) {
-        console.error("Quiz Insertion Error:", quizError);
-        alert(`خطا در ایجاد آزمون: ${quizError.message}`);
-        return;
-      }
+      if (quizError) throw quizError;
 
       const createdQuizId = quizData[0].id;
-      console.log(`آزمون ساخته شد. شناسه: ${createdQuizId}. ارسال سوالات...`);
 
-      // مرحله دوم: ثبت سوالات متصل به آزمون
-      // مپ کردن حروف الف، ب، ج، د (یا a, b, c, d) به اعداد 1 تا 4 برای دیتابیس
+      // مپ کردن حروف انتخابی فرم به فرمت حروف بزرگ مورد نیاز دیتابیس (A, B, C, D)
       const optionMapping = { 'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D' };
-      
+
+      // مرحله دوم: آماده‌سازی و درج سوالات در جدول questions
       const questionsToInsert = questions.map(item => ({
         quiz_id: createdQuizId,
         question_text: item.q,
@@ -204,93 +168,93 @@ function TeacherDashboard({ userId }) {
         option_b: item.b,
         option_c: item.c,
         option_d: item.d,
-        correct_option: optionMapping[item.correct] || item.correct // اگر دیتابیس عدد بخواهد تبدیل می‌شود
+        correct_option: optionMapping[item.correct] || item.correct
       }));
 
       const { error: questionsError } = await supabase
         .from('questions')
         .insert(questionsToInsert);
 
-      if (questionsError) {
-        console.error("Questions Insertion Error:", questionsError);
-        alert(`آزمون ساخته شد ولی سوالات ثبت نشدند: ${questionsError.message}`);
-        return;
-      }
+      if (questionsError) throw questionsError;
 
       alert('آزمون و تمامی سوالات آن با موفقیت منتشر شدند!');
       setTitle('');
       setDuration(10);
       setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
-      fetchQuizzes();
     } catch (err) {
-      console.error("Unexpected Error:", err);
-      alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
+      console.error(err);
+      alert(`خطا در ایجاد آزمون: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-      <div>
-        <h3>🛠️ طراحی و ساخت آزمون جدید</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9f9f9', padding: '20px', borderRadius: '8px' }}>
-          <input type="text" placeholder="عنوان آزمون (مثلا: میان‌ترم رباتیک)" value={title} onChange={e => setTitle(e.target.value)} style={{ padding: '8px' }} />
-          <input type="number" placeholder="مدت زمان (دقیقه)" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '8px' }} />
-          
-          <h4>سوالات آزمون:</h4>
-          {questions.map((q, idx) => (
-            <div key={idx} style={{ padding: '10px', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '10px' }}>
-              <input type="text" placeholder={`صورت سوال ${idx + 1}`} value={q.q} onChange={e => { const updated = [...questions]; updated[idx].q = e.target.value; setQuestions(updated); }} style={{ width: '95%', marginBottom: '5px', padding: '5px' }} />
-              <input type="text" placeholder="گزینه الف" value={q.a} onChange={e => { const updated = [...questions]; updated[idx].a = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
-              <input type="text" placeholder="گزینه ب" value={q.b} onChange={e => { const updated = [...questions]; updated[idx].b = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
-              <input type="text" placeholder="گزینه ج" value={q.c} onChange={e => { const updated = [...questions]; updated[idx].c = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
-              <input type="text" placeholder="گزینه د" value={q.d} onChange={e => { const updated = [...questions]; updated[idx].d = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
-              <div style={{ marginTop: '5px' }}>
-                <label>گزینه صحیح: </label>
-                <select value={q.correct} onChange={e => { const updated = [...questions]; updated[idx].correct = e.target.value; setQuestions(updated); }}>
-                  <option value="a">الف</option>
-                  <option value="b">ب</option>
-                  <option value="c">ج</option>
-                  <option value="d">د</option>
-                </select>
-              </div>
-            </div>
-          ))}
-          <button type="button" onClick={addQuestionField} style={{ padding: '5px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>➕ افزودن سوال بعدی</button>
-          <button type="button" onClick={handleCreateQuiz} style={{ padding: '10px', backgroundColor: '#34495e', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>🚀 انتشار نهایی آزمون</button>
+    <div>
+      <h2>پنل مدیریت استاد - ساخت آزمون جدید</h2>
+      <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
+        <div style={{ marginBottom: '10px' }}>
+          <label>عنوان آزمون: </label>
+          <input type="text" value={title} onChange={e => setTitle(e.target.value)} style={{ padding: '6px', width: '250px' }} />
+        </div>
+        <div>
+          <label>مدت زمان آزمون (دقیقه): </label>
+          <input type="number" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '6px', width: '8px' }} />
         </div>
       </div>
 
-      <div>
-        <h3>📊 رصد آنلاین و ریل‌تایم نتایج دانشجویان</h3>
-        <div style={{ background: '#ecf0f1', padding: '15px', borderRadius: '8px', minHeight: '300px' }}>
-          {submissions.length === 0 ? <p style={{ color: '#7f8c8d' }}>هنوز هیچ پاسخی به صورت زنده ثبت نشده است...</p> : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
-              <thead>
-                <tr style={{ background: '#bdc3c7' }}>
-                  <th style={{ padding: '8px', border: '1px solid #ddd' }}>شناسه دانشجو</th>
-                  <th style={{ padding: '8px', border: '1px solid #ddd' }}>شناسه آزمون</th>
-                  <th style={{ padding: '8px', border: '1px solid #ddd' }}>نمره نهایی</th>
-                </tr>
-              </thead>
-              <tbody>
-                {submissions.map((sub, i) => (
-                  <tr key={i} style={{ textAlign: 'center' }}>
-                    <td style={{ padding: '8px', border: '1px solid #ddd', fontSize: '12px' }}>{sub.student_id}</td>
-                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>{sub.quiz_id}</td>
-                    <td style={{ padding: '8px', border: '1px solid #ddd', color: '#27ae60', fontWeight: 'bold' }}>{sub.score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+      <h3>سوالات آزمون</h3>
+      {questions.map((item, index) => (
+        <div key={index} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '15px', borderRadius: '6px' }}>
+          <h4>سوال {index + 1}</h4>
+          <input type="text" placeholder="صورت سوال" value={item.q} onChange={e => handleQuestionChange(index, 'q', e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '10px' }} />
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <input type="text" placeholder="گزینه الف (A)" value={item.a} onChange={e => handleQuestionChange(index, 'a', e.target.value)} style={{ padding: '6px' }} />
+            <input type="text" placeholder="گزینه ب (B)" value={item.b} onChange={e => handleQuestionChange(index, 'b', e.target.value)} style={{ padding: '6px' }} />
+            <input type="text" placeholder="گزینه ج (C)" value={item.c} onChange={e => handleQuestionChange(index, 'c', e.target.value)} style={{ padding: '6px' }} />
+            <input type="text" placeholder="گزینه د (D)" value={item.d} onChange={e => handleQuestionChange(index, 'd', e.target.value)} style={{ padding: '6px' }} />
+          </div>
+
+          <div style={{ marginTop: '10px' }}>
+            <label>گزینه صحیح: </label>
+            <select value={item.correct} onChange={e => handleQuestionChange(index, 'correct', e.target.value)} style={{ padding: '4px' }}>
+              <option value="a">گزینه الف (A)</option>
+              <option value="b">گزینه ب (B)</option>
+              <option value="c">گزینه ج (C)</option>
+              <option value="d">گزینه د (D)</option>
+            </select>
+          </div>
         </div>
-      </div>
+      ))}
+
+      <button onClick={handleAddQuestion} style={{ padding: '8px 15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' }}>افزودن سوال جدید</button>
+      <button onClick={handleCreateQuiz} disabled={loading} style={{ padding: '8px 20px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+        {loading ? 'در حال ثبت...' : 'انتشار نهایی آزمون'}
+      </button>
     </div>
   );
 }
 
-// --- داشبورد دانشجو ---
-upabase
+// ==========================================
+// کامپوننت داشبورد دانشجو
+// ==========================================
+function StudentDashboard({ userId }) {
+  const [quizzes, setQuizzes] = useState([]);
+  const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({}); 
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchAvailableQuizzes();
+  }, []);
+
+  const fetchAvailableQuizzes = async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
         .from('quizzes')
         .select('*')
         .gt('end_time', now)
@@ -303,7 +267,6 @@ upabase
     }
   };
 
-  // ۲. شروع آزمون و دریافت سوالات مربوط به آن
   const startQuiz = async (quiz) => {
     setLoading(true);
     try {
@@ -315,7 +278,7 @@ upabase
       if (error) throw error;
 
       if (!data || data.length === 0) {
-        alert('این آزمون هیچ سوالی ندارد!');
+        alert('این آزمون سوالی ندارد!');
         return;
       }
 
@@ -323,23 +286,20 @@ upabase
       setQuestions(data);
       setAnswers({});
 
-      // محاسبه زمان باقی‌مانده بر اساس زمان پایان آزمون (به ثانیه)
       const durationInSeconds = Math.floor((new Date(quiz.end_time) - new Date()) / 1000);
       setTimeLeft(durationInSeconds > 0 ? durationInSeconds : 0);
-
     } catch (error) {
-      console.error('Error starting quiz:', error);
-      alert('خطا در بارگذاری سوالات آزمون');
+      console.error(error);
+      alert('خطا در بارگذاری سوالات');
     } finally {
       setLoading(false);
     }
   };
 
-  // تایمر معکوس آزمون
   useEffect(() => {
     if (!currentQuiz || timeLeft <= 0) {
       if (currentQuiz && timeLeft === 0) {
-        alert('زمان آزمون به پایان رسید!');
+        alert('زمان قانونی آزمون به پایان رسید!');
         handleSubmitQuiz();
       }
       return;
@@ -352,41 +312,36 @@ upabase
     return () => clearInterval(timer);
   }, [timeLeft, currentQuiz]);
 
-  // ۳. ثبت نهایی پاسخ‌های دانشجو در دیتابیس
+  const handleSubmitQuiz = async () => {
+    if (!currentQuiz) return;
+    setLoading(true);
 
-const handleSubmitQuiz = async () => {
-  if (!currentQuiz) return;
-  setLoading(true);
+    try {
+      const submissionData = {
+        user_id: userId,
+        quiz_id: currentQuiz.id,
+        answers: answers, // به صورت شیء مپ‌شده JSONB ذخیره می‌شود { "question_id": "A" }
+        submitted_at: new Date().toISOString()
+      };
 
-  try {
-    // آماده‌سازی دقیق payload برای جدول quiz_submissions
-    const submissionData = {
-      user_id: userId,
-      quiz_id: currentQuiz.id,
-      // شیء answers دقیقاً به فرمت { "question_id_1": "A", "question_id_2": "C" } ذخیره می‌شود
-      answers: answers, 
-      submitted_at: new Date().toISOString()
-    };
+      const { error } = await supabase
+        .from('quiz_submissions')
+        .insert([submissionData]);
 
-    const { error } = await supabase
-      .from('quiz_submissions') // استفاده از نام دقیق جدول شما
-      .insert([submissionData]);
+      if (error) throw error;
 
-    if (error) throw error;
+      alert('پاسخ‌های شما با موفقیت ثبت شد.');
+      setCurrentQuiz(null);
+      setQuestions([]);
+      fetchAvailableQuizzes();
+    } catch (error) {
+      console.error(error);
+      alert(`خطا در ثبت نهایی آزمون: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    alert('پاسخ‌های شما با موفقیت در سیستم ثبت شد.');
-    setCurrentQuiz(null);
-    setQuestions([]);
-    fetchAvailableQuizzes();
-  } catch (error) {
-    console.error('Error submitting quiz:', error);
-    alert(`خطا در ثبت آزمون: ${error.message}`);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // فرمت کردن زمان به شکل MM:SS
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -395,52 +350,52 @@ const handleSubmitQuiz = async () => {
 
   if (currentQuiz) {
     return (
-      <div className="quiz-container">
+      <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #eee' }}>
         <h2>{currentQuiz.title}</h2>
-        <div className="timer">زمان باقی‌مانده: {formatTime(timeLeft)}</div>
+        <div style={{ color: 'red', fontWeight: 'bold', marginBottom: '20px' }}>زمان باقی‌مانده: {formatTime(timeLeft)}</div>
         
         {questions.map((q, index) => (
-          <div key={q.id} className="question-block">
+          <div key={q.id} style={{ marginBottom: '20px', borderBottom: '1px dashed #eee', paddingBottom: '15px' }}>
             <p><strong>سوال {index + 1}:</strong> {q.question_text}</p>
-            <div className="options">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
               {['A', 'B', 'C', 'D'].map(opt => (
-                <label key={opt} className="option-label">
+                <label key={opt} style={{ cursor: 'pointer' }}>
                   <input
                     type="radio"
                     name={`question-${q.id}`}
                     value={opt}
                     checked={answers[q.id] === opt}
-                    // ذخیره با همان حروف بزرگ A, B, C, D که دیتابیس دوست دارد
                     onChange={() => setAnswers({ ...answers, [q.id]: opt })} 
+                    style={{ marginLeft: '8px' }}
                   />
-                  {q[`option_${opt.toLowerCase()}`]}
+                  {opt}: {q[`option_${opt.toLowerCase()}`]}
                 </label>
               ))}
             </div>
           </div>
         ))}
 
-        <button onClick={handleSubmitQuiz} disabled={loading} className="btn-submit">
-          {loading ? 'در حال ثبت...' : 'پایان و ارسال آزمون'}
+        <button onClick={handleSubmitQuiz} disabled={loading} style={{ padding: '10px 25px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}>
+          {loading ? 'در حال ارسال...' : 'پایان و ارسال آزمون'}
         </button>
       </div>
     );
   }
 
   return (
-    <div className="dashboard-container">
-      <h2>آزمون‌های فعال و در دسترس</h2>
+    <div>
+      <h2>آزمون‌های فعال سیستم</h2>
       {quizzes.length === 0 ? (
-        <p>در حال حاضر هیچ آزمون فعالی وجود ندارد.</p>
+        <p>در حال حاضر آزمون باز و فعالی پیدا نشد.</p>
       ) : (
-        <ul className="quiz-list">
+        <ul style={{ listStyle: 'none', padding: 0 }}>
           {quizzes.map(quiz => (
-            <li key={quiz.id} className="quiz-item">
+            <li key={quiz.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9f9f9', padding: '15px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #ebd' }}>
               <div>
                 <strong>{quiz.title}</strong>
-                <span className="quiz-date"> پایان: {new Date(quiz.end_time).toLocaleTimeString('fa-IR')}</span>
+                <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>پایان: {new Date(quiz.end_time).toLocaleTimeString('fa-IR')}</div>
               </div>
-              <button onClick={() => startQuiz(quiz)} disabled={loading} className="btn-start">
+              <button onClick={() => startQuiz(quiz)} disabled={loading} style={{ padding: '6px 15px', background: '#17a2b8', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                 شروع آزمون
               </button>
             </li>
@@ -449,12 +404,4 @@ const handleSubmitQuiz = async () => {
       )}
     </div>
   );
-}
-
-export default StudentDashboard;
-
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(<App />);
 }
