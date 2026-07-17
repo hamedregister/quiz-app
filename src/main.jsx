@@ -37,38 +37,37 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRole = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      
-      if (data) setRole(data.role);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+  const fetchUserRole = async (session) => {
+    if (session?.user?.user_metadata?.role) {
+      setRole(session.user.user_metadata.role);
+    } else {
+      setRole('student'); // پیش فرض
     }
+    setLoading(false);
   };
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) alert(error.message);
-      else {
-        // ایجاد پروفایل کاربری با نقش مشخص شده
-        await supabase.from('profiles').insert([{ id: data.user.id, role: selectedRole }]);
-        alert('ثبت‌نام با موفقیت انجام شد. وارد شوید.');
-        setIsSignUp(false);
+    const handleAuth = async (e) => {
+      e.preventDefault();
+      if (isSignUp) {
+        // ارسال نقش در متادیتا به همراه ثبت نام
+        const { data, error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            data: { role: selectedRole }
+          }
+        });
+      
+        if (error) alert(error.message);
+        else {
+          alert('ثبت‌نام با موفقیت انجام شد. لطفاً ایمیل خود را تایید کنید.');
+          setIsSignUp(false);
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) alert(error.message);
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
-    }
-  };
+    };
 
   if (loading) {
     return <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'sans-serif' }}>در حال بارگذاری ایمن وب‌اپلیکیشن آزمون‌ساز...</div>;
