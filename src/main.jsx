@@ -121,6 +121,7 @@ function App() {
 }
 
 // --- داشبورد استاد ---
+// --- داشبورد استاد اصلاح‌شده ---
 function TeacherDashboard() {
   const [quizzes, setQuizzes] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -151,9 +152,24 @@ function TeacherDashboard() {
     setQuestions([...questions, { q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
   };
 
-  const handleCreateQuiz = async (e) => {
-    e.preventDefault();
+  const handleCreateQuiz = async () => {
+    // چک کردن ولیدیشن به صورت دستی و با پیام مشخص
+    if (!title.trim()) {
+      alert('لطفاً عنوان آزمون را وارد کنید.');
+      return;
+    }
+
+    // بررسی اینکه فیلدهای سوالات خالی نباشند
+    for (let i = 0; i < questions.length; i++) {
+      const item = questions[i];
+      if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
+        alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
+        return;
+      }
+    }
+
     try {
+      console.log("برقراری ارتباط با سوبابیس برای ثبت آزمون...");
       const { data, error } = await supabase
         .from('quizzes')
         .insert([{ title, duration: parseInt(duration), questions }]);
@@ -163,7 +179,7 @@ function TeacherDashboard() {
         alert(`خطا در ذخیره دیتابیس: ${error.message}\nکد خطا: ${error.code}`);
         return;
       }
-  
+
       alert('آزمون با موفقیت ساخته و منتشر شد.');
       setTitle('');
       setDuration(10);
@@ -179,18 +195,18 @@ function TeacherDashboard() {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
       <div>
         <h3>🛠️ طراحی و ساخت آزمون جدید</h3>
-        <form onSubmit={handleCreateQuiz} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9f9f9', padding: '20px', borderRadius: '8px' }}>
-          <input type="text" placeholder="عنوان آزمون (مثلا: میان‌ترم رباتیک)" value={title} onChange={e => setTitle(e.target.value)} required style={{ padding: '8px' }} />
-          <input type="number" placeholder="مدت زمان (دقیقه)" value={duration} onChange={e => setDuration(e.target.value)} required style={{ padding: '8px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9f9f9', padding: '20px', borderRadius: '8px' }}>
+          <input type="text" placeholder="عنوان آزمون (مثلا: میان‌ترم رباتیک)" value={title} onChange={e => setTitle(e.target.value)} style={{ padding: '8px' }} />
+          <input type="number" placeholder="مدت زمان (دقیقه)" value={duration} onChange={e => setDuration(e.target.value)} style={{ padding: '8px' }} />
           
           <h4>سوالات آزمون:</h4>
           {questions.map((q, idx) => (
             <div key={idx} style={{ padding: '10px', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '10px' }}>
-              <input type="text" placeholder={`صورت سوال ${idx + 1}`} value={q.q} onChange={e => { const updated = [...questions]; updated[idx].q = e.target.value; setQuestions(updated); }} required style={{ width: '95%', marginBottom: '5px', padding: '5px' }} />
-              <input type="text" placeholder="گزینه الف" value={q.a} onChange={e => { const updated = [...questions]; updated[idx].a = e.target.value; setQuestions(updated); }} required style={{ width: '45%', margin: '2px' }} />
-              <input type="text" placeholder="گزینه ب" value={q.b} onChange={e => { const updated = [...questions]; updated[idx].b = e.target.value; setQuestions(updated); }} required style={{ width: '45%', margin: '2px' }} />
-              <input type="text" placeholder="گزینه ج" value={q.c} onChange={e => { const updated = [...questions]; updated[idx].c = e.target.value; setQuestions(updated); }} required style={{ width: '45%', margin: '2px' }} />
-              <input type="text" placeholder="گزینه د" value={q.d} onChange={e => { const updated = [...questions]; updated[idx].d = e.target.value; setQuestions(updated); }} required style={{ width: '45%', margin: '2px' }} />
+              <input type="text" placeholder={`صورت سوال ${idx + 1}`} value={q.q} onChange={e => { const updated = [...questions]; updated[idx].q = e.target.value; setQuestions(updated); }} style={{ width: '95%', marginBottom: '5px', padding: '5px' }} />
+              <input type="text" placeholder="گزینه الف" value={q.a} onChange={e => { const updated = [...questions]; updated[idx].a = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
+              <input type="text" placeholder="گزینه ب" value={q.b} onChange={e => { const updated = [...questions]; updated[idx].b = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
+              <input type="text" placeholder="گزینه ج" value={q.c} onChange={e => { const updated = [...questions]; updated[idx].c = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
+              <input type="text" placeholder="گزینه د" value={q.d} onChange={e => { const updated = [...questions]; updated[idx].d = e.target.value; setQuestions(updated); }} style={{ width: '45%', margin: '2px' }} />
               <div style={{ marginTop: '5px' }}>
                 <label>گزینه صحیح: </label>
                 <select value={q.correct} onChange={e => { const updated = [...questions]; updated[idx].correct = e.target.value; setQuestions(updated); }}>
@@ -202,9 +218,9 @@ function TeacherDashboard() {
               </div>
             </div>
           ))}
-          <button type="button" onClick={addQuestionField} style={{ padding: '5px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px' }}>➕ افزودن سوال بعدی</button>
-          <button type="submit" style={{ padding: '10px', backgroundColor: '#34495e', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px' }}>🚀 انتشار نهایی آزمون</button>
-        </form>
+          <button type="button" onClick={addQuestionField} style={{ padding: '5px', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>➕ افزودن سوال بعدی</button>
+          <button type="button" onClick={handleCreateQuiz} style={{ padding: '10px', backgroundColor: '#34495e', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>🚀 انتشار نهایی آزمون</button>
+        </div>
       </div>
 
       <div>
