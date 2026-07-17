@@ -112,7 +112,7 @@ function App() {
           </p>
         </div>
       ) : role === 'teacher' ? (
-        <TeacherDashboard />
+        <TeacherDashboard userId={session.user.id} />
       ) : (
         <StudentDashboard userId={session.user.id} />
       )}
@@ -122,7 +122,7 @@ function App() {
 
 // --- داشبورد استاد ---
 // --- داشبورد استاد اصلاح‌شده ---
-function TeacherDashboard() {
+function TeacherDashboard({ userId }) {
   const [quizzes, setQuizzes] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [title, setTitle] = useState('');
@@ -153,78 +153,77 @@ function TeacherDashboard() {
   };
 
   const handleCreateQuiz = async () => {
-  // ۱. بررسی ولیدیشن دستی فیلدها
-  if (!title.trim()) {
-    alert('لطفاً عنوان آزمون را وارد کنید.');
-    return;
-  }
-
-  for (let i = 0; i < questions.length; i++) {
-    const item = questions[i];
-    if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
-      alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
-      return;
-    }
-  }
-
-  try {
-    console.log("در حال ساخت ردیف آزمون در جدول quizzes...");
-    const startTime = new Date();
-    const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
-
-    // مرحله اول: ثبت خود آزمون و دریافت شناسه آن (.select() برای گرفتن ID الزامی است)
-    const { data: quizData, error: quizError } = await supabase
-      .from('quizzes')
-      .insert([
-        { 
-          title, 
-          start_time: startTime.toISOString(), 
-          end_time: endTime.toISOString()
-        }
-      ])
-      .select(); // آی‌دی آزمون ساخته شده را برمی‌گرداند
-    
-    if (quizError) {
-      console.error("Quiz Insertion Error:", quizError);
-      alert(`خطا در ایجاد آزمون: ${quizError.message}`);
+    if (!title.trim()) {
+      alert('لطفاً عنوان آزمون را وارد کنید.');
       return;
     }
 
-    const createdQuizId = quizData[0].id;
-    console.log(`آزمون با موفقیت ساخته شد. شناسه: ${createdQuizId}. حالا نوبت ثبت سوالات است...`);
-
-    // مرحله دوم: آماده‌سازی آرایه سوالات بر اساس ستون‌های جدول questions شما
-    // فرض بر این است که ستون‌های جدول questions شما شامل: quiz_id, question_text, option_a, option_b, option_c, option_d, correct_option است.
-    const questionsToInsert = questions.map(item => ({
-      quiz_id: createdQuizId,
-      question_text: item.q,
-      option_a: item.a,
-      option_b: item.b,
-      option_c: item.c,
-      option_d: item.d,
-      correct_option: item.correct
-    }));
-
-    const { error: questionsError } = await supabase
-      .from('questions')
-      .insert(questionsToInsert);
-
-    if (questionsError) {
-      console.error("Questions Insertion Error:", questionsError);
-      alert(`آزمون ساخته شد ولی سوالات ثبت نشدند: ${questionsError.message}`);
-      return;
+    for (let i = 0; i < questions.length; i++) {
+      const item = questions[i];
+      if (!item.q.trim() || !item.a.trim() || !item.b.trim() || !item.c.trim() || !item.d.trim()) {
+        alert(`لطفاً تمام گزینه‌ها و صورت سوال شماره ${i + 1} را کامل کنید.`);
+        return;
+      }
     }
 
-    alert('آزمون و تمامی سوالات آن با موفقیت منتشر شدند!');
-    setTitle('');
-    setDuration(10);
-    setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
-    fetchQuizzes();
-  } catch (err) {
-    console.error("Unexpected Error:", err);
-    alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
-  }
-};
+    try {
+      console.log("در حال ساخت ردیف آزمون به همراه شناسه استاد...");
+      const startTime = new Date();
+      const endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
+
+      // مرحله اول: ثبت آزمون با پر کردن فیلد created_by
+      const { data: quizData, error: quizError } = await supabase
+        .from('quizzes')
+        .insert([
+          { 
+            title, 
+            start_time: startTime.toISOString(), 
+            end_time: endTime.toISOString(),
+            created_by: userId // شناسه کاربری استاد در اینجا قرار می‌گیرد
+          }
+        ])
+        .select();
+      
+      if (quizError) {
+        console.error("Quiz Insertion Error:", quizError);
+        alert(`خطا در ایجاد آزمون: ${quizError.message}`);
+        return;
+      }
+
+      const createdQuizId = quizData[0].id;
+      console.log(`آزمون ساخته شد. شناسه: ${createdQuizId}. ارسال سوالات...`);
+
+      // مرحله دوم: ثبت سوالات متصل به آزمون
+      const questionsToInsert = questions.map(item => ({
+        quiz_id: createdQuizId,
+        question_text: item.q,
+        option_a: item.a,
+        option_b: item.b,
+        option_c: item.c,
+        option_d: item.d,
+        correct_option: item.correct
+      }));
+
+      const { error: questionsError } = await supabase
+        .from('questions')
+        .insert(questionsToInsert);
+
+      if (questionsError) {
+        console.error("Questions Insertion Error:", questionsError);
+        alert(`آزمون ساخته شد ولی سوالات ثبت نشدند: ${questionsError.message}`);
+        return;
+      }
+
+      alert('آزمون و تمامی سوالات آن با موفقیت منتشر شدند!');
+      setTitle('');
+      setDuration(10);
+      setQuestions([{ q: '', a: '', b: '', c: '', d: '', correct: 'a' }]);
+      fetchQuizzes();
+    } catch (err) {
+      console.error("Unexpected Error:", err);
+      alert('یک خطای غیرمنتظره رخ داد: ' + err.message);
+    }
+  };
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
